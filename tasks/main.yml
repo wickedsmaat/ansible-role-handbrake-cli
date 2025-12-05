@@ -1,0 +1,120 @@
+---
+- name: Install the CUDA Development Repository
+  ansible.builtin.yum_repository:
+      name: cuda-rhel9.repo
+      description: CUDA Repository
+      baseurl: https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/
+      gpgcheck: false
+      gpgkey: https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/D42D0685.pub
+      enabled: true
+  tags: cuda-repo
+
+- name: Install "Development Group"
+  ansible.builtin.dnf:
+    name: "@Development Tools"
+    state: present
+  tags: development
+
+- name: Install Dependencies
+  ansible.builtin.dnf:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - gcc
+    - gcc-c++
+    - make
+    - automake
+    - autoconf
+    - libtool
+    - patch
+    - cmake
+  tags: dependencies
+
+- name: Install Build-Time Dependencies
+  ansible.builtin.dnf:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - bzip2
+    - bzip2-devel
+    - cuda-cudart-12-4
+    - cuda-cudart-devel-12-4
+    - cuda-nvcc-12-4
+    - cuda-nvml-devel-12-4
+    - cuda-nvrtc-12-4
+    - cuda-nvrtc-devel-12-4
+    - cuda-toolkit-12-4
+    - dbus-devel
+    - fribidi-devel
+    - intltool
+    - jansson
+    - jansson-devel
+    - lame-devel
+    - lame-libs
+    - libaacs
+    - libaacs-devel
+    - libaacs-utils
+    - libass
+    - libass-devel
+    - libjpeg-turbo
+    - libjpeg-turbo-devel
+    - libogg
+    - libogg-devel
+    - libsamplerate-devel
+    - libtheora-devel
+    - libvorbis
+    - libvorbis-devel
+    - libvpx
+    - libvpx-devel
+    - meson
+    - nasm
+    - ninja-build
+    - numactl
+    - numactl-devel
+    - opus
+    - opus-devel
+    - pkgconf-pkg-config
+    - python3-devel
+    - speex
+    - speex-devel
+    - wget
+    - x264
+    - x264-devel
+    - x265
+    - x265-devel
+    - yasm
+    - zlib
+    - zlib-devel
+  tags: build-time-dependencies
+
+- name: Update PATH and LD_LIBRARY_PATH for CUDA
+  ansible.builtin.template:
+    src: /home/ansible/templates/rhel/cuda.j2
+    dest: /etc/profile.d/cuda.sh
+    owner: root
+    group: root
+    mode: '0755'
+  tags: cuda-path
+
+- name: Source CUDA Environment Variables
+  ansible.builtin.shell:
+    cmd: source /etc/profile.d/cuda.sh
+  changed_when: false
+  failed_when: false
+  tags: source-cuda
+
+- name: Verify CUDA Installation
+  ansible.builtin.command:
+    cmd: /usr/local/cuda-12.4/bin/nvcc --version
+  register: cuda_version
+  changed_when: false
+  failed_when: cuda_version.rc != 0
+  tags: nvcc-version
+
+- name: Verify CUDA Installation 2
+  ansible.builtin.stat:
+    path: /usr/local/cuda/lib64/libnvrtc.so
+  register: libnvrtc
+  changed_when: false
+  failed_when: libnvrtc.stat.exists == false
+  tags: verify-cuda
