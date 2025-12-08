@@ -1,12 +1,13 @@
 ---
 - name: Install the CUDA Development Repository
   ansible.builtin.yum_repository:
-      name: cuda-rhel9.repo
+      name: cuda-rhel{{ ansible_distribution_major_version }}.repo
       description: CUDA Repository
-      baseurl: https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/
+      baseurl: "https://developer.download.nvidia.com/compute/cuda/repos/rhel{{ ansible_distribution_major_version }}/x86_64/"
       gpgcheck: false
-      gpgkey: https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/D42D0685.pub
+      gpgkey: "https://developer.download.nvidia.com/compute/cuda/repos/rhel{{ ansible_distribution_major_version }}/x86_64/D42D0685.pub"
       enabled: true
+  when: ansible_os_family == "RedHat"
   tags: cuda-repo
 
 - name: Install "Development Group"
@@ -89,7 +90,7 @@
 
 - name: Update PATH and LD_LIBRARY_PATH for CUDA
   ansible.builtin.template:
-    src: /home/ansible/templates/rhel/cuda.j2
+    src: templates/cuda.j2
     dest: /etc/profile.d/cuda.sh
     owner: root
     group: root
