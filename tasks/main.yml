@@ -1,27 +1,27 @@
 ---
-- name: Install the CUDA Development Repository
+- name: install the cuda development repository
   ansible.builtin.yum_repository:
       name: cuda-rhel{{ ansible_distribution_major_version }}.repo
-      description: CUDA Repository
+      description: cuda repository
       baseurl: "https://developer.download.nvidia.com/compute/cuda/repos/rhel{{ ansible_distribution_major_version }}/x86_64/"
       gpgcheck: false
-      gpgkey: "https://developer.download.nvidia.com/compute/cuda/repos/rhel{{ ansible_distribution_major_version }}/x86_64/D42D0685.pub"
+      gpgkey: "https://developer.download.nvidia.com/compute/cuda/repos/rhel{{ ansible_distribution_major_version }}/x86_64/d42d0685.pub"
       enabled: true
   when:
-    - ansible_architecture != 'aarch64'
-    - ansible_os_family == 'RedHat'
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
   tags: cuda-repo
 
-- name: Install "Development Group"
+- name: install "development group"
   ansible.builtin.dnf:
-    name: "@Development Tools"
+    name: "@development tools"
     state: present
   when:
-    - ansible_architecture != 'aarch64'
-    - ansible_os_family == 'RedHat'
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
   tags: development
 
-- name: Install Dependencies
+- name: install dependencies
   ansible.builtin.dnf:
     name: "{{ item }}"
     state: present
@@ -35,11 +35,11 @@
     - patch
     - cmake
   when:
-    - ansible_architecture != 'aarch64'
-    - ansible_os_family == 'RedHat'
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
   tags: dependencies
 
-- name: Install Build-Time Dependencies
+- name: install build-time dependencies
   ansible.builtin.dnf:
     name: "{{ item }}"
     state: present
@@ -95,11 +95,11 @@
     - zlib
     - zlib-devel
   when:
-    - ansible_architecture != 'aarch64'
-    - ansible_os_family == 'RedHat'
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
   tags: build-time-dependencies
 
-- name: Update PATH and LD_LIBRARY_PATH for CUDA
+- name: update path and ld_library_path for cuda
   ansible.builtin.template:
     src: templates/cuda.j2
     dest: /etc/profile.d/cuda.sh
@@ -107,38 +107,164 @@
     group: root
     mode: '0755'
   when:
-    - ansible_architecture != 'aarch64'
-    - ansible_os_family == 'RedHat'
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
   tags: cuda-path
 
-- name: Source CUDA Environment Variables
+- name: source cuda environment variables
   ansible.builtin.shell:
     cmd: source /etc/profile.d/cuda.sh
   changed_when: false
   failed_when: false
   when:
-    - ansible_architecture != 'aarch64'
-    - ansible_os_family == 'RedHat'
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
   tags: source-cuda
 
-- name: Verify CUDA Installation
+- name: verify cuda installation
   ansible.builtin.command:
     cmd: /usr/local/cuda-12.4/bin/nvcc --version
   register: cuda_version
   changed_when: false
   failed_when: cuda_version.rc != 0
   when:
-    - ansible_architecture != 'aarch64'
-    - ansible_os_family == 'RedHat'
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
   tags: nvcc-version
 
-- name: Verify CUDA Installation 2
+- name: verify cuda installation 2
   ansible.builtin.stat:
     path: /usr/local/cuda/lib64/libnvrtc.so
   register: libnvrtc
   changed_when: false
   failed_when: libnvrtc.stat.exists == false
   when:
-    - ansible_architecture != 'aarch64'
-    - ansible_os_family == 'RedHat'
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
   tags: verify-cuda
+
+- name: check if media group exists
+  ansible.builtin.getent:
+    database: group
+    key: media
+  register: media_group
+  failed_when: false
+  when:
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
+  tags: check-media-group
+
+- name: create media group if it does not exist
+  ansible.builtin.group:
+    name: media
+    state: present
+  when:
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
+    - media_group.ansible_facts.getent_group.media is not defined
+  tags: create-media-group
+
+- name: Create the working directory for handbrake build
+  ansible.builtin.file:
+    path: /opt/handbrake
+    state: directory
+    owner: root
+    group: media
+    mode: '2775'
+  when:
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
+  tags: working_dirs
+
+- name: clone handbrake git repository
+  ansible.builtin.git:
+    repo: https://github.com/HandBrake/HandBrake.git
+    dest: /opt/handbrake
+  when:
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
+  tags: clone-handbrake
+
+- name: remove --enable-cuda-llvm from ffmpeg module.defs
+  ansible.builtin.replace:
+    path: /opt/handbrake/contrib/ffmpeg/module.defs
+    regexp: '^[ \t]*--enable-cuda-llvm \\\n?'
+    replace: ''
+  when:
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
+  tags: disable_llvm
+
+- name: configure build directory
+  ansible.builtin.command:
+    argv:
+      - /opt/handbrake/configure
+      - --verbose
+      - --python
+      - /usr/bin/python3.12
+      - --arch
+      - x86_64
+      - --cpu
+      - native
+      - --disable-gtk
+      - --enable-x265
+      - --enable-numa
+      - --enable-fdk-aac
+      - --enable-nvenc
+      - --enable-nvdec
+      - --disable-libdovi
+      - --launch
+    creates: /opt/handbrake/build/gnumakefile
+  register: handbrake_configure
+  when:
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
+  tags: handbrake_configure
+
+- name: compile handbrake cli
+  ansible.builtin.command:
+    argv:
+      - make
+      - -j35
+      - --directory=/opt/handbrake/build
+  when: handbrake_configure is succeeded and handbrake_configure.rc == 0
+  failed_when: handbrake_compile.rc != 0
+  changed_when: handbrake_compile.rc == 0
+  register: handbrake_compile
+  when:
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
+  tags: handbrake_compile
+
+- name: check if handbrake-cli binary exists
+  ansible.builtin.stat:
+    path: /opt/handbrake/build/HandBrakeCLI
+  register: handbrake_binary
+  when:
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
+  tags: check-binary
+
+- name: fail if handbrake-cli binary does not exist
+  ansible.builtin.fail:
+    msg: "HandBrakeCLI binary not found in /opt/handbrake/build"
+  when:
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
+    - not handbrake_binary.stat.exists
+  tags: check-binary
+
+- name: copy handbrake-cli to /usr/bin
+  ansible.builtin.copy:
+    src: /opt/handbrake/build/HandBrakeCLI
+    dest: /usr/bin/HandBrakeCLI
+    owner: root
+    group: root
+    mode: '0755'
+    remote_src: true
+  when:
+    - ansible_architecture == 'x86_64'
+    - ansible_os_family | lower == 'redhat'
+    - handbrake_binary.stat.exists
+  tags: install-binary
+...

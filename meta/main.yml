@@ -1,14 +1,15 @@
 ---
 galaxy_info:
   author: thisguyshouldworkforus
-  description: Ansible Roles for stuff and junk
+  description: Ansible Role to install HandBrake CLI on RHEL-based systems.
   company: "Hire This Guy, LLC."
   license: MIT
   min_ansible_version: 2.1
   galaxy_tags:
-    - 1.0.0
     - handbrake
     - video
-    - handbrake-cli
-dependencies: []
+    - cli
+dependencies:
+  - thisguyshouldworkforus.rhel
+  - thisguyshouldworkforus.nvidia
 ...
